@@ -1,16 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { Copy, Download, QrCode, Link as LinkIcon, Code, CheckCircle2, RotateCcw, X, Loader2 } from 'lucide-react';
-
-// --- KONFIGURASI SUPABASE ---
-const supabaseUrl = 'https://sehbzyxpuwvfwurkczko.supabase.co/rest/v1/';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaGJ6eXhwdXd2Znd1cmtjemtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0MTYzNjgsImV4cCI6MjA5NDk5MjM2OH0.Qt45JUP90MKV7zdbiYdB0PlHaw1X_tsKN8axCIjCHZU';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// --- KONFIGURASI DOMAIN ANDA ---
-// Ganti dengan domain yang akan Anda gunakan (misal: wa.apookat.com)
-// Jika masih pakai netlify, biarkan pakai origin saat ini
-const DOMAIN_URL = window.location.origin;
+import {
+  Copy, Download, QrCode, Link as LinkIcon,
+  Code, CheckCircle2, RotateCcw, X,
+} from 'lucide-react';
 
 const COUNTRIES = [
   { name: 'Indonesia',             dial_code: '62',  flag: '🇮🇩' },
@@ -194,113 +186,80 @@ const COUNTRIES = [
   { name: 'Zimbabwe', dial_code: '263', flag: '🇿🇼' }
 ];
 
+const escapeHtml = (text) =>
+  text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const parseWhatsAppFormatting = (text) => {
+  if (!text) {
+    return <span className="text-slate-400 italic">Ketik pesan Anda di sini...</span>;
+  }
+  const html = escapeHtml(text)
+    .replace(/\*(.*?)\*/g,  '<strong>$1</strong>')
+    .replace(/_(.*?)_/g,    '<em>$1</em>')
+    .replace(/~(.*?)~/g,    '<del>$1</del>')
+    .replace(/\n/g,         '<br />');
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+};
+
+const WhatsAppIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className={className} fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+  </svg>
+);
 
 export default function App() {
-  const [isRedirecting, setIsRedirecting] = useState(true);
-  const [redirectError, setRedirectError] = useState(false);
-
   const [selectedCountryName, setSelectedCountryName] = useState('Indonesia');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [message, setMessage] = useState('');
-  
+  const [phoneNumber, setPhoneNumber]   = useState('');
+  const [message, setMessage]           = useState('');
   const [showResultModal, setShowResultModal] = useState(false);
-  const [resultTab, setResultTab] = useState('link');
-  const [copiedId, setCopiedId] = useState(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  
-  const [generatedShortLink, setGeneratedShortLink] = useState('');
+  const [resultTab, setResultTab]       = useState('link');
+  const [copiedId, setCopiedId]         = useState(null);
 
   const textareaRef = useRef(null);
+
   const selectedCountry = COUNTRIES.find((c) => c.name === selectedCountryName) || COUNTRIES[0];
-  const countryCode = selectedCountry.dial_code;
+  const countryCode     = selectedCountry.dial_code;
 
-  // URL untuk fitur Embed/QR Code (menggunakan link pendek, bukan wa.me langsung)
-  const htmlCode = `<a href="${generatedShortLink}" target="_blank" rel="noopener noreferrer">Hubungi Kami via WhatsApp</a>`;
-  const qrCodeUrl = `https://quickchart.io/qr?text=${encodeURIComponent(generatedShortLink)}&size=300&margin=1`;
+  const generatedLink = `https://wa.me/${countryCode}${phoneNumber}?text=${encodeURIComponent(message)}`;
+  const htmlCode      = `<a href="${generatedLink}" target="_blank" rel="noopener noreferrer">Hubungi Kami via WhatsApp</a>`;
+  const qrCodeUrl     = `https://quickchart.io/qr?text=${encodeURIComponent(generatedLink)}&size=300&margin=1`;
 
-  // --- LOGIKA REDIRECT PENGUNJUNG ---
   useEffect(() => {
-    const checkAndRedirect = async () => {
-      // Mengambil kode dari URL (misal apookat.com/abcde -> dapat 'abcde')
-      const pathCode = window.location.pathname.replace('/', '');
-      
-      if (pathCode && pathCode.length > 0) {
-        try {
-          // Cari di database
-          const { data, error } = await supabase
-            .from('links')
-            .select('*')
-            .eq('short_code', pathCode)
-            .single();
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [message]);
 
-          if (data) {
-            // Tambahkan klik +1 secara diam-diam
-            await supabase
-              .from('links')
-              .update({ clicks: data.clicks + 1 })
-              .eq('id', data.id);
+  const handleFormat = (type) => {
+    if (!textareaRef.current) return;
+    const start        = textareaRef.current.selectionStart;
+    const end          = textareaRef.current.selectionEnd;
+    const selectedText = message.substring(start, end);
+    const wrappers     = { bold: '*', italic: '_', strike: '~' };
+    const wrapper      = wrappers[type];
+    if (!wrapper) return;
 
-            // Arahkan pengunjung ke WhatsApp tujuan
-            const waLink = `https://wa.me/${data.phone_number}?text=${encodeURIComponent(data.message || '')}`;
-            window.location.replace(waLink);
-          } else {
-            // Jika kode tidak ditemukan, stop loading
-            setRedirectError(true);
-            setIsRedirecting(false);
-          }
-        } catch (err) {
-          console.error('Error fetching link:', err);
-          setRedirectError(true);
-          setIsRedirecting(false);
-        }
-      } else {
-        // Jika tidak ada kode di URL, berarti ini admin yang mau bikin link (tampilkan form)
-        setIsRedirecting(false);
-      }
-    };
+    setMessage(message.substring(0, start) + wrapper + selectedText + wrapper + message.substring(end));
 
-    checkAndRedirect();
-  }, []);
+    setTimeout(() => {
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(start + 1, end + 1);
+    }, 0);
+  };
 
-  // --- LOGIKA PEMBUATAN LINK BARU ---
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     if (!phoneNumber) {
       alert('Harap masukkan nomor handphone terlebih dahulu.');
       return;
     }
-
-    setIsGenerating(true);
-
-    // Buat 6 digit kode acak
-    const randomCode = Math.random().toString(36).substring(2, 8);
-    const fullPhoneNumber = `${countryCode}${phoneNumber}`;
-
-    try {
-      // Simpan ke database
-      const { error } = await supabase
-        .from('links')
-        .insert([
-          { 
-            short_code: randomCode, 
-            phone_number: fullPhoneNumber, 
-            message: message 
-          }
-        ]);
-
-      if (error) throw error;
-
-      // Sukses! Buat link tampilannya
-      setGeneratedShortLink(`${DOMAIN_URL}/${randomCode}`);
-      setShowResultModal(true);
-      setResultTab('link');
-      setCopiedId(null);
-      
-    } catch (error) {
-      console.error('Gagal membuat link:', error);
-      alert('Terjadi kesalahan saat membuat link. Silakan coba lagi.');
-    } finally {
-      setIsGenerating(false);
-    }
+    setShowResultModal(true);
+    setResultTab('link');
+    setCopiedId(null);
   };
 
   const handleReset = () => {
@@ -315,38 +274,29 @@ export default function App() {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
-      // Fallback
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.cssText = 'position:absolute;left:-9999px;top:-9999px';
+      document.body.appendChild(el);
+      el.select();
+      try {
+        document.execCommand('copy');
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
+      } finally {
+        el.remove();
+      }
     }
   };
 
-  // TAMPILAN LOADING SAAT REDIRECT KE WHATSAPP
-  if (isRedirecting) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-        <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <h2 className="text-xl font-bold text-slate-800">Mengarahkan ke WhatsApp...</h2>
-        <p className="text-slate-500 mt-2">Mohon tunggu sebentar.</p>
-      </div>
-    );
-  }
-
-  // TAMPILAN FORM UTAMA (Untuk Admin / Pembuat Link)
   return (
-    <div className="flex flex-col lg:flex-row bg-slate-50 font-sans relative w-full min-h-screen">
-      
-      {redirectError && (
-        <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-center py-2 z-50">
-          Link WhatsApp tidak ditemukan atau sudah tidak aktif.
-        </div>
-      )}
-
-      {/* --- MODAL HASIL --- */}
+    <div className="flex flex-col lg:flex-row bg-slate-50 font-sans relative w-full">
       {showResultModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setShowResultModal(false)} />
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <h3 className="text-xl font-bold text-slate-800">Tautan Trackable Anda Siap!</h3>
+              <h3 className="text-xl font-bold text-slate-800">Tautan Anda Siap!</h3>
               <button onClick={() => setShowResultModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-full hover:bg-slate-100"><X size={24} /></button>
             </div>
             <div className="flex border-b border-slate-100">
@@ -366,15 +316,14 @@ export default function App() {
             <div className="p-8 flex flex-col items-center justify-center min-h-[250px] bg-slate-50/50">
               {resultTab === 'link' && (
                 <div className="w-full">
-                  <p className="text-sm text-slate-500 mb-3 font-medium">Link Pendek (Klik otomatis terhitung)</p>
+                  <p className="text-sm text-slate-500 mb-3 font-medium">Tautan WhatsApp Langsung (Tanpa Iklan)</p>
                   <div className="flex bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm transition-all">
-                    <input type="text" readOnly value={generatedShortLink} className="flex-1 p-4 text-sm text-slate-700 outline-none w-full" />
-                    <button onClick={() => copyToClipboard(generatedShortLink, 'link')} className="bg-emerald-500 text-white px-6 font-semibold text-sm hover:bg-emerald-600 transition-colors flex items-center gap-2 m-1 rounded-md">
+                    <input type="text" readOnly value={generatedLink} className="flex-1 p-4 text-sm text-slate-700 outline-none w-full" />
+                    <button onClick={() => copyToClipboard(generatedLink, 'link')} className="bg-emerald-500 text-white px-6 font-semibold text-sm hover:bg-emerald-600 transition-colors flex items-center gap-2 m-1 rounded-md">
                       {copiedId === 'link' ? <CheckCircle2 size={16} /> : <Copy size={16} />}
                       {copiedId === 'link' ? 'Tersalin' : 'Salin'}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-400 mt-4 text-center">Gunakan link ini di bio Instagram/TikTok Anda untuk melacak klik.</p>
                 </div>
               )}
               {resultTab === 'qrcode' && (
@@ -402,15 +351,16 @@ export default function App() {
         </div>
       )}
 
-      {/* --- FORM KIRI --- */}
-      <div className="w-full lg:w-1/2 px-6 pb-6 pt-4 md:px-12 md:pb-12 md:pt-6 lg:px-16 lg:pb-16 lg:pt-8 flex flex-col xl:pr-8">
+      {/* DIUBAH: Memisahkan padding atas agar tidak tertimpa oleh p-12 atau p-16 di layar besar */}
+      <div className="w-full lg:w-1/2 px-6 pb-6 pt-4 md:px-12 md:pb-12 md:pt-6 lg:px-14 lg:pb-16 lg:pt-8 flex flex-col xl:pr-8">
         <div className="max-w-xl mx-auto lg:mx-0 w-full lg:ml-auto">
           <div className="mb-10">
             <h1 className="text-2xl sm:text-3xl xl:text-4xl font-extrabold text-slate-900 mb-4 flex items-center gap-3">
-              <span className="leading-tight">Trackable WA <span className="whitespace-nowrap">Link Generator</span></span>
+              <WhatsAppIcon className="w-9 h-9 sm:w-10 sm:h-10 text-emerald-500 shrink-0" />
+              <span className="leading-tight">Free WhatsApp <span className="whitespace-nowrap">link generator</span></span>
             </h1>
             <p className="text-slate-600 text-base md:text-lg leading-relaxed">
-              Buat link WhatsApp yang otomatis melacak jumlah klik. Cocok untuk bio Instagram dan kebutuhan Digital Marketing.
+              Untuk membuat Link WhatsApp Anda, tambahkan nomor Anda dan masukkan pesan yang sudah terisi sebelumnya yang dapat dikirim pengunjung Anda hanya dengan satu ketukan.
             </p>
           </div>
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-6">
@@ -426,31 +376,43 @@ export default function App() {
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Pesan Kustom</label>
               <div className="border border-slate-300 rounded-xl transition-all bg-white flex flex-col overflow-hidden shadow-sm">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border-b border-slate-200">
+                  <button onClick={() => handleFormat('bold')} title="Tebal (*teks*)" className="w-8 h-8 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded transition-colors">B</button>
+                  <button onClick={() => handleFormat('italic')} title="Miring (_teks_)" className="w-8 h-8 flex items-center justify-center italic font-serif text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded transition-colors">I</button>
+                  <button onClick={() => handleFormat('strike')} title="Coret (~teks~)" className="w-8 h-8 flex items-center justify-center line-through text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded transition-colors">S</button>
+                </div>
                 <textarea ref={textareaRef} placeholder="Halo, saya ingin bertanya tentang layanan Anda..." value={message} onChange={(e) => setMessage(e.target.value)} className="w-full p-4 outline-none text-slate-800 placeholder-slate-400 resize-none min-h-[120px]" />
               </div>
             </div>
             <div className="flex flex-col sm:flex-row items-center justify-between pt-2 gap-4">
               <button onClick={handleReset} className="text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-2 w-full sm:w-auto justify-center"><RotateCcw size={16} /> Reset</button>
-              <button onClick={handleGenerate} disabled={isGenerating} className="w-full sm:w-auto bg-emerald-500 text-white px-8 py-3.5 rounded-xl font-bold text-sm tracking-wide hover:bg-emerald-600 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2">
-                {isGenerating ? <Loader2 size={18} className="animate-spin" /> : null}
-                {isGenerating ? 'Menyimpan...' : 'Generate Short Link'}
-              </button>
+              <button onClick={handleGenerate} className="w-full sm:w-auto bg-emerald-500 text-white px-8 py-3.5 rounded-xl font-bold text-sm tracking-wide hover:bg-emerald-600 hover:-translate-y-0.5 transition-all shadow-lg shadow-emerald-500/30">Generate Link</button>
             </div>
           </div>
+          <div className="pt-8 text-sm font-semibold text-slate-400 text-center lg:text-left">Powered by <a href="https://apookat.com" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">apookat.com</a></div>
         </div>
       </div>
       
-      {/* --- MOCKUP HP KANAN --- */}
+      {/* DIUBAH: Memisahkan padding atas agar sejajar dengan bagian kiri */}
       <div className="w-full lg:w-1/2 px-6 pb-6 pt-4 md:px-12 md:pb-12 md:pt-6 lg:px-16 lg:pb-16 lg:pt-8 flex flex-col items-center relative xl:pl-8">
+        <div className="absolute inset-0 z-0 overflow-hidden hidden lg:block">
+          <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-emerald-100/50 blur-3xl" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] rounded-full bg-blue-100/50 blur-3xl" />
+        </div>
         <div className="w-[320px] h-[640px] bg-slate-900 rounded-[3rem] shadow-2xl p-3 relative z-10 border-[6px] border-slate-800 mt-4">
           <div className="absolute top-3 left-1/2 -translate-x-1/2 w-32 h-7 bg-slate-900 rounded-full z-30" />
           <div className="w-full h-full bg-[#efeae2] rounded-[2.5rem] overflow-hidden flex flex-col relative">
             <div className="bg-[#00a884] text-white p-4 pt-12 flex items-center gap-3 shadow-sm z-20 relative">
-              <div className="flex-1 min-w-0"><div className="font-semibold text-sm truncate">{phoneNumber ? `+${countryCode} ${phoneNumber}` : 'Preview WhatsApp'}</div></div>
+              <div className="w-10 h-10 bg-slate-200/20 rounded-full flex items-center justify-center overflow-hidden shrink-0"><WhatsAppIcon className="w-6 h-6 text-white" /></div>
+              <div className="flex-1 min-w-0"><div className="font-semibold text-sm truncate">{phoneNumber ? `+${countryCode} ${phoneNumber}` : 'Nomor Tujuan'}</div></div>
             </div>
+            <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-0" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 2h4v4H2V2zm4 4h4v4H6V6zm4 4h4v4h-4v-4zm4 4h4v4h-4v-4z' fill='%23000' fill-opacity='1' fill-rule='evenodd'/%3E%3C/svg%3E")`, backgroundSize: '40px', }} />
             <div className="flex-1 p-4 flex flex-col justify-end overflow-y-auto relative z-10 pb-6">
+              <div className="flex justify-center mb-4"><span className="bg-white/80 backdrop-blur-sm text-slate-500 text-[11px] px-3 py-1 rounded-lg shadow-sm">Hari Ini</span></div>
               <div className="bg-[#dcf8c6] self-end max-w-[85%] rounded-2xl rounded-tr-none p-2.5 shadow-sm text-sm text-slate-800 relative">
-                <div className="pr-12 break-words text-[15px] leading-relaxed">{message || "Ketik pesan Anda..."}</div>
+                <span className="absolute top-0 right-[-6px] text-[#dcf8c6]"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><path d="M0 0H8L0 12V0Z" /></svg></span>
+                <div className="pr-12 break-words text-[15px] leading-relaxed">{parseWhatsAppFormatting(message)}</div>
+                <div className="absolute bottom-1 right-2 text-[10px] text-emerald-700/60 flex items-center gap-1 font-medium">{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}<svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg></div>
               </div>
             </div>
           </div>
